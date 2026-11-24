@@ -344,7 +344,7 @@ var safeQueryParamModelRef = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 func parseModelURL(urlStr string) (modelURL, error) {
 	matches := modelURLRegex.FindStringSubmatch(urlStr)
 	if len(matches) != 3 && len(matches) != 4 {
-		return modelURL{}, fmt.Errorf("invalid model URL: %s", urlStr)
+		return modelURL{}, fmt.Errorf("invalid model URL: scheme or reference is malformed")
 	}
 	scheme, ref := matches[1], matches[2]
 	name, path, _ := strings.Cut(ref, "/")
@@ -357,7 +357,7 @@ func parseModelURL(urlStr string) (modelURL, error) {
 		queryParams := strings.TrimPrefix(matches[3], "?")
 		urlParser, err := url.ParseQuery(queryParams)
 		if err != nil {
-			return modelURL{}, fmt.Errorf("invalid query parameters in model URL: %s", urlStr)
+			return modelURL{}, fmt.Errorf("invalid query parameters in model URL")
 		}
 		modelname := urlParser.Get("model") // e.g. pvc://my-pvc?model=qwen2:0.5b
 		if modelname != "" {

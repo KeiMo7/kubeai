@@ -260,7 +260,151 @@ type ModelStatusReplicas struct {
 }
 
 type ModelStatusCache struct {
+	// Loaded reports whether the cache entry for this Model has been fully
+	// downloaded. It is never true for an interrupted or failed download.
 	Loaded bool `json:"loaded"`
+
+	// Entry describes the cache entry backing this Model. The entry key is
+	// derived from the source identity and is shared by every Model that
+	// references the same source version.
+	Entry *ModelCacheEntryStatus `json:"entry,omitempty"`
+
+	// Volume describes the cache volume ledger as observed for this Model.
+	Volume *ModelCacheVolumeStatus `json:"volume,omitempty"`
+
+	// Admission explains the most recent admission decision for this Model.
+	Admission *ModelCacheAdmissionStatus `json:"admission,omitempty"`
+
+	// Placement explains where replicas are (or should be) placed.
+	Placement *ModelPlacementStatus `json:"placement,omitempty"`
+}
+
+// ModelCacheEntryStatus describes a single cache entry on a cache volume.
+type ModelCacheEntryStatus struct {
+	// Key is the stable, credential-free identifier of the entry.
+	Key string `json:"key"`
+	// RelPath is the entry directory relative to the volume root.
+	RelPath string `json:"relPath,omitempty"`
+	// Volume is the name of the volume that holds the entry.
+	Volume string `json:"volume"`
+	// SizeBytes is the measured or declared size of the entry.
+	SizeBytes int64 `json:"sizeBytes"`
+	// SizeKnown is false when the entry has never been measured.
+	SizeKnown bool `json:"sizeKnown"`
+	// LastUsed is the most recent time the entry was referenced or served.
+	LastUsed *metav1.Time `json:"lastUsed,omitempty"`
+	// ReferencedBy is the number of Models that reference the entry.
+	ReferencedBy int32 `json:"referencedBy"`
+	// LoadState is one of Pending, Loading, Ready, Failed or Unknown.
+	LoadState string `json:"loadState"`
+	// Reclaimable is true when no Model references the entry and no Pod uses it.
+	Reclaimable bool `json:"reclaimable"`
+}
+
+// ModelCacheVolumeStatus describes the capacity ledger for a cache volume.
+type ModelCacheVolumeStatus struct {
+	// Name is the name of the PersistentVolumeClaim backing the volume.
+	Name string `json:"name"`
+	// BudgetBytes is the capacity declared by the volume.
+	BudgetBytes int64 `json:"budgetBytes"`
+	// UsedBytes is the sum of known entry sizes.
+	UsedBytes int64 `json:"usedBytes"`
+	// PendingBytes is the sum of active load reservations.
+	PendingBytes int64 `json:"pendingBytes"`
+	// ReclaimableBytes is the sum of reclaimable entry sizes.
+	ReclaimableBytes int64 `json:"reclaimableBytes"`
+	// Entries lists the entries known on the volume.
+	Entries []ModelCacheEntryStatus `json:"entries,omitempty"`
+	// RecentReclaims lists the most recent capacity reclaims in order.
+	RecentReclaims []ModelCacheReclaimStatus `json:"recentReclaims,omitempty"`
+	// RecentRejections lists the most recent admission rejections in order.
+	RecentRejections []ModelCacheRejectionStatus `json:"recentRejections,omitempty"`
+}
+
+// ModelCacheRejectionStatus describes one admission rejection.
+type ModelCacheRejectionStatus struct {
+	// EntryKey is the entry that was rejected.
+	EntryKey string `json:"entryKey"`
+	// RequiredBytes is the size the entry needed.
+	RequiredBytes int64 `json:"requiredBytes"`
+	// AvailableBytes is the free budget at decision time.
+	AvailableBytes int64 `json:"availableBytes"`
+	// ShortfallBytes is how much the entry exceeded the available budget.
+	ShortfallBytes int64 `json:"shortfallBytes"`
+	// Reason is a short human readable explanation.
+	Reason string `json:"reason"`
+	// At is when the rejection was decided.
+	At metav1.Time `json:"at"`
+}
+
+// ModelCacheReclaimStatus describes one capacity reclaim.
+type ModelCacheReclaimStatus struct {
+	// EntryKey is the reclaimed entry.
+	EntryKey string `json:"entryKey"`
+	// SizeBytes is the size that was freed.
+	SizeBytes int64 `json:"sizeBytes"`
+	// Reason is a short human readable explanation.
+	Reason string `json:"reason"`
+	// At is when the reclaim was decided.
+	At metav1.Time `json:"at"`
+}
+
+// ModelCacheAdmissionStatus explains an admission decision.
+type ModelCacheAdmissionStatus struct {
+	// Admitted is true when the entry may be downloaded.
+	Admitted bool `json:"admitted"`
+	// Reason is a short human readable explanation.
+	Reason string `json:"reason"`
+	// Volume is the volume the decision applies to.
+	Volume string `json:"volume,omitempty"`
+	// RequiredBytes is the size the new entry needs.
+	RequiredBytes int64 `json:"requiredBytes,omitempty"`
+	// AvailableBytes is the free budget at decision time.
+	AvailableBytes int64 `json:"availableBytes,omitempty"`
+	// ShortfallBytes is how much the entry exceeds the available budget.
+	ShortfallBytes int64 `json:"shortfallBytes,omitempty"`
+	// Holders names the Models or entries that occupy the volume.
+	Holders []string `json:"holders,omitempty"`
+	// Reclaimed lists the entries that were reclaimed to admit the entry.
+	Reclaimed []string `json:"reclaimed,omitempty"`
+	// At is when the decision was made.
+	At *metav1.Time `json:"at,omitempty"`
+}
+
+// ModelPlacementStatus explains replica placement for a Model.
+type ModelPlacementStatus struct {
+	// EntryKey ties the placement conclusion to the cache entry that supports it.
+	EntryKey string `json:"entryKey,omitempty"`
+	// Volume ties the placement conclusion to the cache volume.
+	Volume string `json:"volume,omitempty"`
+	// Valid is false when the supporting entry is missing, reclaimed or migrating.
+	Valid bool `json:"valid"`
+	// Reason is a short human readable explanation.
+	Reason string `json:"reason"`
+	// Replicas contains one entry per existing replica and one per replica to create.
+	Replicas []ModelPlacementReplicaStatus `json:"replicas,omitempty"`
+}
+
+// ModelPlacementReplicaStatus describes the placement of one replica.
+type ModelPlacementReplicaStatus struct {
+	// Pod is the name of an existing replica, empty for a replica to create.
+	Pod string `json:"pod,omitempty"`
+	// Node is the node of an existing replica, empty for a replica to create.
+	Node string `json:"node,omitempty"`
+	// Reason is a short human readable explanation.
+	Reason string `json:"reason"`
+	// Candidates is the deterministic preference order for a replica to create.
+	Candidates []ModelPlacementCandidateStatus `json:"candidates,omitempty"`
+}
+
+// ModelPlacementCandidateStatus is one candidate node in preference order.
+type ModelPlacementCandidateStatus struct {
+	// Node is the candidate node name.
+	Node string `json:"node"`
+	// Rank starts at 0 for the most preferred candidate.
+	Rank int32 `json:"rank"`
+	// Reason is a short human readable explanation of the preference.
+	Reason string `json:"reason"`
 }
 
 // NOTE: Model name length should be limited to allow for the model name to be used in

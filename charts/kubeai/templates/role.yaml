@@ -43,6 +43,17 @@ rules:
   - patch
   - update
   - watch
+# Read-only node inventory is used to rank replica placement candidates.
+# Without this permission placement degrades to the hard constraints only and
+# replica creation continues normally.
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resources:

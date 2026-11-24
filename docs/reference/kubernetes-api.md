@@ -180,7 +180,179 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `loaded` _boolean_ |  |  |  |
+| `loaded` _boolean_ | Loaded reports whether the cache entry for this Model has been fully downloaded. It is never true for an interrupted or failed download. |  |  |
+| `entry` _[ModelCacheEntryStatus](#modelcacheentrystatus)_ | Entry describes the cache entry backing this Model. The entry key is derived from the source identity and is shared by every Model that references the same source version. |  |  |
+| `volume` _[ModelCacheVolumeStatus](#modelcachevolumestatus)_ | Volume describes the cache volume ledger as observed for this Model. |  |  |
+| `admission` _[ModelCacheAdmissionStatus](#modelcacheadmissionstatus)_ | Admission explains the most recent admission decision for this Model. |  |  |
+| `placement` _[ModelPlacementStatus](#modelplacementstatus)_ | Placement explains where replicas are (or should be) placed. |  |  |
+
+
+#### ModelCacheEntryStatus
+
+
+
+ModelCacheEntryStatus describes a single cache entry on a cache volume.
+
+
+
+_Appears in:_
+- [ModelStatusCache](#modelstatuscache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `key` _string_ | Key is the stable, credential-free identifier of the entry. |  |  |
+| `relPath` _string_ | RelPath is the entry directory relative to the volume root. |  |  |
+| `volume` _string_ | Volume is the name of the volume that holds the entry. |  |  |
+| `sizeBytes` _integer_ | SizeBytes is the measured or declared size of the entry. |  |  |
+| `sizeKnown` _boolean_ | SizeKnown is false when the entry has never been measured. |  |  |
+| `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#time-v1-meta)_ | LastUsed is the most recent time the entry was referenced or served. |  |  |
+| `referencedBy` _integer_ | ReferencedBy is the number of Models that reference the entry. |  |  |
+| `loadState` _string_ | LoadState is one of Pending, Loading, Ready, Failed or Unknown. |  |  |
+| `reclaimable` _boolean_ | Reclaimable is true when no Model references the entry and no Pod uses it. |  |  |
+
+
+#### ModelCacheVolumeStatus
+
+
+
+ModelCacheVolumeStatus describes the capacity ledger for a cache volume.
+
+
+
+_Appears in:_
+- [ModelStatusCache](#modelstatuscache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the PersistentVolumeClaim backing the volume. |  |  |
+| `budgetBytes` _integer_ | BudgetBytes is the capacity declared by the volume. |  |  |
+| `usedBytes` _integer_ | UsedBytes is the sum of known entry sizes. |  |  |
+| `pendingBytes` _integer_ | PendingBytes is the sum of active load reservations. |  |  |
+| `reclaimableBytes` _integer_ | ReclaimableBytes is the sum of reclaimable entry sizes. |  |  |
+| `entries` _[ModelCacheEntryStatus](#modelcacheentrystatus) array_ | Entries lists the entries known on the volume. |  |  |
+| `recentReclaims` _[ModelCacheReclaimStatus](#modelcachereclaimstatus) array_ | RecentReclaims lists the most recent capacity reclaims in order. |  |  |
+| `recentRejections` _[ModelCacheRejectionStatus](#modelcacherejectionstatus) array_ | RecentRejections lists the most recent admission rejections in order. |  |  |
+
+
+#### ModelCacheAdmissionStatus
+
+
+
+ModelCacheAdmissionStatus explains an admission decision.
+
+
+
+_Appears in:_
+- [ModelStatusCache](#modelstatuscache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `admitted` _boolean_ | Admitted is true when the entry may be downloaded. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation. |  |  |
+| `volume` _string_ | Volume is the volume the decision applies to. |  |  |
+| `requiredBytes` _integer_ | RequiredBytes is the size the new entry needs. |  |  |
+| `availableBytes` _integer_ | AvailableBytes is the free budget at decision time. |  |  |
+| `shortfallBytes` _integer_ | ShortfallBytes is how much the entry exceeds the available budget. |  |  |
+| `holders` _string array_ | Holders names the Models or entries that occupy the volume. |  |  |
+| `reclaimed` _string array_ | Reclaimed lists the entries that were reclaimed to admit the entry. |  |  |
+| `at` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#time-v1-meta)_ | At is when the decision was made. |  |  |
+
+
+#### ModelPlacementStatus
+
+
+
+ModelPlacementStatus explains replica placement for a Model.
+
+
+
+_Appears in:_
+- [ModelStatusCache](#modelstatuscache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `entryKey` _string_ | EntryKey ties the placement conclusion to the cache entry that supports it. |  |  |
+| `volume` _string_ | Volume ties the placement conclusion to the cache volume. |  |  |
+| `valid` _boolean_ | Valid is false when the supporting entry is missing, reclaimed or migrating. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation. |  |  |
+| `replicas` _[ModelPlacementReplicaStatus](#modelplacementreplicastatus) array_ | Replicas contains one entry per existing replica and one per replica to create. |  |  |
+
+
+#### ModelPlacementReplicaStatus
+
+
+
+ModelPlacementReplicaStatus describes the placement of one replica.
+
+
+
+_Appears in:_
+- [ModelPlacementStatus](#modelplacementstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `pod` _string_ | Pod is the name of an existing replica, empty for a replica to create. |  |  |
+| `node` _string_ | Node is the node of an existing replica, empty for a replica to create. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation. |  |  |
+| `candidates` _[ModelPlacementCandidateStatus](#modelplacementcandidatestatus) array_ | Candidates is the deterministic preference order for a replica to create. |  |  |
+
+
+#### ModelPlacementCandidateStatus
+
+
+
+ModelPlacementCandidateStatus is one candidate node in preference order.
+
+
+
+_Appears in:_
+- [ModelPlacementReplicaStatus](#modelplacementreplicastatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `node` _string_ | Node is the candidate node name. |  |  |
+| `rank` _integer_ | Rank starts at 0 for the most preferred candidate. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation of the preference. |  |  |
+
+
+#### ModelCacheReclaimStatus
+
+
+
+ModelCacheReclaimStatus describes one capacity reclaim.
+
+
+
+_Appears in:_
+- [ModelCacheVolumeStatus](#modelcachevolumestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `entryKey` _string_ | EntryKey is the reclaimed entry. |  |  |
+| `sizeBytes` _integer_ | SizeBytes is the size that was freed. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation. |  |  |
+| `at` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#time-v1-meta)_ | At is when the reclaim was decided. |  |  |
+
+
+#### ModelCacheRejectionStatus
+
+
+
+ModelCacheRejectionStatus describes one admission rejection.
+
+
+
+_Appears in:_
+- [ModelCacheVolumeStatus](#modelcachevolumestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `entryKey` _string_ | EntryKey is the entry that was rejected. |  |  |
+| `requiredBytes` _integer_ | RequiredBytes is the size the entry needed. |  |  |
+| `availableBytes` _integer_ | AvailableBytes is the free budget at decision time. |  |  |
+| `shortfallBytes` _integer_ | ShortfallBytes is how much the entry exceeded the available budget. |  |  |
+| `reason` _string_ | Reason is a short human readable explanation. |  |  |
+| `at` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#time-v1-meta)_ | At is when the rejection was decided. |  |  |
 
 
 #### ModelStatusReplicas

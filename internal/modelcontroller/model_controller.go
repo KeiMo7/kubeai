@@ -137,13 +137,38 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res 
 		return ctrl.Result{}, nil
 	}
 
+	var cacheResult *cacheReconcileResult
 	if model.Spec.CacheProfile != "" {
-		cacheRes, err := r.reconcileCache(ctx, model, modelConfig)
+		cacheRes, cacheInfo, err := r.reconcileCache(ctx, model, modelConfig)
 		if err != nil {
 			if errors.Is(err, errReturnEarly) {
 				return cacheRes, nil
 			}
 			return cacheRes, fmt.Errorf("reconciling cache: %w", err)
+		}
+		cacheResult = cacheInfo
+		if cacheInfo != nil {
+			if cacheInfo.RelPath != "" {
+				// The Pod template must mount the exact entry directory that
+				// the ledger assigned. This is decided before the template is
+				// built and only changes with the entry, never with placement
+				// preferences.
+				modelConfig.CacheEntryRelPath = cacheInfo.RelPath
+			}
+			if cacheInfo.Entry != nil {
+				modelConfig.CacheEntryKey = cacheInfo.Entry.Key
+			}
+		}
+		if cacheInfo == nil || !cacheInfo.Loaded {
+			// A previous placement conclusion is no longer supported once the
+			// entry is missing, reclaiming or reloading. Mark it invalid before
+			// returning so status never points at a stale entry.
+			r.invalidatePlacement(model, cacheInfo)
+			// Do not create model replicas until the cache entry is ready.
+			if cacheRes.IsZero() {
+				cacheRes = ctrl.Result{RequeueAfter: cacheRetryDelay}
+			}
+			return cacheRes, nil
 		}
 		if !cacheRes.IsZero() {
 			return cacheRes, nil
@@ -200,6 +225,18 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res 
 		}
 	}
 
+	if r.shouldReconcilePlacement(model, cacheResult) {
+		allPods.Items = nonTerminatingPods(allPods.Items)
+		r.reconcilePlacement(ctx, model, modelConfig, cacheResult.Entry, cacheResult.Volume, allPods.Items)
+		if cacheResult.Entry != nil && cacheResult.Entry.Present {
+			// Label serving Pods with their entry after the Pod plan has
+			// settled. This only writes labels, so it cannot rebuild a replica.
+			if err := r.updateServingPodCacheLabels(ctx, plan.toRemain, cacheResult.Entry.Key, cacheResult.Entry.RelPath, cacheResult.Volume); err != nil {
+				return ctrl.Result{}, fmt.Errorf("labeling serving pods with cache entry: %w", err)
+			}
+		}
+	}
+
 	if err := r.reconcileAdapters(ctx, plan.toRemain, model.Spec.Adapters); err != nil {
 		if errors.Is(err, errReturnEarly) {
 			return ctrl.Result{}, nil
@@ -208,6 +245,53 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// shouldReconcilePlacement reports whether a placement conclusion should be
+// (re)computed. Models without a cache profile keep the pre-existing behavior
+// and get no placement status at all.
+func (r *ModelReconciler) shouldReconcilePlacement(model *kubeaiv1.Model, cacheResult *cacheReconcileResult) bool {
+	if model.Spec.CacheProfile == "" || model.Status.Cache == nil {
+		return false
+	}
+	return cacheResult != nil
+}
+
+func nonTerminatingPods(pods []corev1.Pod) []corev1.Pod {
+	out := pods[:0]
+	for i := range pods {
+		if pods[i].DeletionTimestamp == nil {
+			out = append(out, pods[i])
+		}
+	}
+	return out
+}
+
+// invalidatePlacement marks a previously stored placement conclusion stale
+// when the entry supporting it is no longer present. Existing replicas keep
+// their node and are not rebuilt; only the conclusion is withdrawn.
+func (r *ModelReconciler) invalidatePlacement(model *kubeaiv1.Model, cacheInfo *cacheReconcileResult) {
+	if model.Status.Cache == nil {
+		return
+	}
+	current := model.Status.Cache.Placement
+	entry := (*cacheEntryView)(nil)
+	if cacheInfo != nil {
+		entry = cacheInfo.Entry
+	}
+	key := ""
+	if entry != nil {
+		key = entry.Key
+	} else if cacheInfo != nil {
+		key = cacheInfo.Key
+	}
+	if current == nil || current.Valid {
+		model.Status.Cache.Placement = &kubeaiv1.ModelPlacementStatus{
+			EntryKey: key,
+			Valid:    false,
+			Reason:   placementReasonDeferred,
+		}
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -333,6 +417,14 @@ type ModelConfig struct {
 	config.ResourceProfile
 	Image  string
 	Source modelSource
+	// CacheEntryRelPath is the entry directory on the cache volume, resolved
+	// from the volume ledger before the Pod template is built. An empty value
+	// keeps the historic per-Model directory.
+	CacheEntryRelPath string
+	// CacheEntryKey is the stable cache entry identity. It is only used for a
+	// Pod label so serving replicas protect their entry; it contains a hash and
+	// never the source address.
+	CacheEntryKey string
 }
 
 func (r *ModelReconciler) getModelConfig(model *kubeaiv1.Model) (ModelConfig, error) {

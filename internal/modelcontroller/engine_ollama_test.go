@@ -109,9 +109,27 @@ fi
 	command[2] = strings.ReplaceAll(command[2], "/bin/ollama", "'"+strings.ReplaceAll(binary, "'", "'\\''")+"'")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Env = append(os.Environ(), "OLLAMA_TEST_LOG="+logFile, "OLLAMA_TEST_FAIL="+failAt)
-	output, err := cmd.CombinedOutput()
+	var output []byte
+	var err error
+	// A concurrent fork can briefly inherit the just-written script's fd,
+	// surfacing as ETXTBSY. Retrying with a fresh Cmd is safe and keeps the
+	// test deterministic.
+	for attempt := 0; attempt < 20; attempt++ {
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+		cmd.Env = append(os.Environ(), "OLLAMA_TEST_LOG="+logFile, "OLLAMA_TEST_FAIL="+failAt)
+		output, err = cmd.CombinedOutput()
+		if err == nil {
+			break
+		}
+		text := string(output)
+		if err != nil {
+			text += err.Error()
+		}
+		if !strings.Contains(text, "text file busy") && !strings.Contains(text, "Text file busy") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	require.NoError(t, ctx.Err(), "probe timed out: %s", output)
 	data, readErr := os.ReadFile(logFile)
 	require.NoError(t, readErr, "probe output: %s", output)

@@ -361,8 +361,337 @@ spec:
             properties:
               cache:
                 properties:
+                  admission:
+                    description: Admission explains the most recent admission decision
+                      for this Model.
+                    properties:
+                      admitted:
+                        description: Admitted is true when the entry may be downloaded.
+                        type: boolean
+                      at:
+                        description: At is when the decision was made.
+                        format: date-time
+                        type: string
+                      availableBytes:
+                        description: AvailableBytes is the free budget at decision
+                          time.
+                        format: int64
+                        type: integer
+                      holders:
+                        description: Holders names the Models or entries that occupy
+                          the volume.
+                        items:
+                          type: string
+                        type: array
+                      reason:
+                        description: Reason is a short human readable explanation.
+                        type: string
+                      reclaimed:
+                        description: Reclaimed lists the entries that were reclaimed
+                          to admit the entry.
+                        items:
+                          type: string
+                        type: array
+                      requiredBytes:
+                        description: RequiredBytes is the size the new entry needs.
+                        format: int64
+                        type: integer
+                      shortfallBytes:
+                        description: ShortfallBytes is how much the entry exceeds
+                          the available budget.
+                        format: int64
+                        type: integer
+                      volume:
+                        description: Volume is the volume the decision applies to.
+                        type: string
+                    required:
+                    - admitted
+                    - reason
+                    type: object
+                  entry:
+                    description: |-
+                      Entry describes the cache entry backing this Model. The entry key is
+                      derived from the source identity and is shared by every Model that
+                      references the same source version.
+                    properties:
+                      key:
+                        description: Key is the stable, credential-free identifier
+                          of the entry.
+                        type: string
+                      lastUsed:
+                        description: LastUsed is the most recent time the entry was
+                          referenced or served.
+                        format: date-time
+                        type: string
+                      loadState:
+                        description: LoadState is one of Pending, Loading, Ready,
+                          Failed or Unknown.
+                        type: string
+                      reclaimable:
+                        description: Reclaimable is true when no Model references
+                          the entry and no Pod uses it.
+                        type: boolean
+                      referencedBy:
+                        description: ReferencedBy is the number of Models that reference
+                          the entry.
+                        format: int32
+                        type: integer
+                      relPath:
+                        description: RelPath is the entry directory relative to the
+                          volume root.
+                        type: string
+                      sizeBytes:
+                        description: SizeBytes is the measured or declared size of
+                          the entry.
+                        format: int64
+                        type: integer
+                      sizeKnown:
+                        description: SizeKnown is false when the entry has never been
+                          measured.
+                        type: boolean
+                      volume:
+                        description: Volume is the name of the volume that holds the
+                          entry.
+                        type: string
+                    required:
+                    - key
+                    - loadState
+                    - reclaimable
+                    - referencedBy
+                    - sizeBytes
+                    - sizeKnown
+                    - volume
+                    type: object
                   loaded:
+                    description: |-
+                      Loaded reports whether the cache entry for this Model has been fully
+                      downloaded. It is never true for an interrupted or failed download.
                     type: boolean
+                  placement:
+                    description: Placement explains where replicas are (or should
+                      be) placed.
+                    properties:
+                      entryKey:
+                        description: EntryKey ties the placement conclusion to the
+                          cache entry that supports it.
+                        type: string
+                      reason:
+                        description: Reason is a short human readable explanation.
+                        type: string
+                      replicas:
+                        description: Replicas contains one entry per existing replica
+                          and one per replica to create.
+                        items:
+                          description: ModelPlacementReplicaStatus describes the placement
+                            of one replica.
+                          properties:
+                            candidates:
+                              description: Candidates is the deterministic preference
+                                order for a replica to create.
+                              items:
+                                description: ModelPlacementCandidateStatus is one
+                                  candidate node in preference order.
+                                properties:
+                                  node:
+                                    description: Node is the candidate node name.
+                                    type: string
+                                  rank:
+                                    description: Rank starts at 0 for the most preferred
+                                      candidate.
+                                    format: int32
+                                    type: integer
+                                  reason:
+                                    description: Reason is a short human readable
+                                      explanation of the preference.
+                                    type: string
+                                required:
+                                - node
+                                - rank
+                                - reason
+                                type: object
+                              type: array
+                            node:
+                              description: Node is the node of an existing replica,
+                                empty for a replica to create.
+                              type: string
+                            pod:
+                              description: Pod is the name of an existing replica,
+                                empty for a replica to create.
+                              type: string
+                            reason:
+                              description: Reason is a short human readable explanation.
+                              type: string
+                          required:
+                          - reason
+                          type: object
+                        type: array
+                      valid:
+                        description: Valid is false when the supporting entry is missing,
+                          reclaimed or migrating.
+                        type: boolean
+                      volume:
+                        description: Volume ties the placement conclusion to the cache
+                          volume.
+                        type: string
+                    required:
+                    - reason
+                    - valid
+                    type: object
+                  volume:
+                    description: Volume describes the cache volume ledger as observed
+                      for this Model.
+                    properties:
+                      budgetBytes:
+                        description: BudgetBytes is the capacity declared by the volume.
+                        format: int64
+                        type: integer
+                      entries:
+                        description: Entries lists the entries known on the volume.
+                        items:
+                          description: ModelCacheEntryStatus describes a single cache
+                            entry on a cache volume.
+                          properties:
+                            key:
+                              description: Key is the stable, credential-free identifier
+                                of the entry.
+                              type: string
+                            lastUsed:
+                              description: LastUsed is the most recent time the entry
+                                was referenced or served.
+                              format: date-time
+                              type: string
+                            loadState:
+                              description: LoadState is one of Pending, Loading, Ready,
+                                Failed or Unknown.
+                              type: string
+                            reclaimable:
+                              description: Reclaimable is true when no Model references
+                                the entry and no Pod uses it.
+                              type: boolean
+                            referencedBy:
+                              description: ReferencedBy is the number of Models that
+                                reference the entry.
+                              format: int32
+                              type: integer
+                            relPath:
+                              description: RelPath is the entry directory relative
+                                to the volume root.
+                              type: string
+                            sizeBytes:
+                              description: SizeBytes is the measured or declared size
+                                of the entry.
+                              format: int64
+                              type: integer
+                            sizeKnown:
+                              description: SizeKnown is false when the entry has never
+                                been measured.
+                              type: boolean
+                            volume:
+                              description: Volume is the name of the volume that holds
+                                the entry.
+                              type: string
+                          required:
+                          - key
+                          - loadState
+                          - reclaimable
+                          - referencedBy
+                          - sizeBytes
+                          - sizeKnown
+                          - volume
+                          type: object
+                        type: array
+                      name:
+                        description: Name is the name of the PersistentVolumeClaim
+                          backing the volume.
+                        type: string
+                      pendingBytes:
+                        description: PendingBytes is the sum of active load reservations.
+                        format: int64
+                        type: integer
+                      recentReclaims:
+                        description: RecentReclaims lists the most recent capacity
+                          reclaims in order.
+                        items:
+                          description: ModelCacheReclaimStatus describes one capacity
+                            reclaim.
+                          properties:
+                            at:
+                              description: At is when the reclaim was decided.
+                              format: date-time
+                              type: string
+                            entryKey:
+                              description: EntryKey is the reclaimed entry.
+                              type: string
+                            reason:
+                              description: Reason is a short human readable explanation.
+                              type: string
+                            sizeBytes:
+                              description: SizeBytes is the size that was freed.
+                              format: int64
+                              type: integer
+                          required:
+                          - at
+                          - entryKey
+                          - reason
+                          - sizeBytes
+                          type: object
+                        type: array
+                      recentRejections:
+                        description: RecentRejections lists the most recent admission
+                          rejections in order.
+                        items:
+                          description: ModelCacheRejectionStatus describes one admission
+                            rejection.
+                          properties:
+                            at:
+                              description: At is when the rejection was decided.
+                              format: date-time
+                              type: string
+                            availableBytes:
+                              description: AvailableBytes is the free budget at decision
+                                time.
+                              format: int64
+                              type: integer
+                            entryKey:
+                              description: EntryKey is the entry that was rejected.
+                              type: string
+                            reason:
+                              description: Reason is a short human readable explanation.
+                              type: string
+                            requiredBytes:
+                              description: RequiredBytes is the size the entry needed.
+                              format: int64
+                              type: integer
+                            shortfallBytes:
+                              description: ShortfallBytes is how much the entry exceeded
+                                the available budget.
+                              format: int64
+                              type: integer
+                          required:
+                          - at
+                          - availableBytes
+                          - entryKey
+                          - reason
+                          - requiredBytes
+                          - shortfallBytes
+                          type: object
+                        type: array
+                      reclaimableBytes:
+                        description: ReclaimableBytes is the sum of reclaimable entry
+                          sizes.
+                        format: int64
+                        type: integer
+                      usedBytes:
+                        description: UsedBytes is the sum of known entry sizes.
+                        format: int64
+                        type: integer
+                    required:
+                    - budgetBytes
+                    - name
+                    - pendingBytes
+                    - reclaimableBytes
+                    - usedBytes
+                    type: object
                 required:
                 - loaded
                 type: object

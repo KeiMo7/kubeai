@@ -158,6 +158,7 @@ func (r *ModelReconciler) calculatePodPlan(allPods *corev1.PodList, model *kubea
 	for _, pod := range remainder {
 		toRemain = append(toRemain, pod)
 	}
+	sort.Slice(toRemain, func(i, j int) bool { return toRemain[i].Name < toRemain[j].Name })
 
 	return &podPlan{
 		model:    model,
